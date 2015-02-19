@@ -74,6 +74,7 @@ jfieldID packetScopeIdFieldId = NULL;
 jfieldID packetPortFieldId = NULL;
 jfieldID packetMemoryAddressFieldId = NULL;
 jfieldID packetCountFieldId = NULL;
+jfieldID acceptedSocketAddrFieldId = NULL;
 
 jmethodID inetSocketAddrMethodId = NULL;
 jmethodID datagramSocketAddrMethodId = NULL;
@@ -535,6 +536,18 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
         packetCountFieldId = (*env)->GetFieldID(env, nativeDatagramPacketCls, "count", "I");
         if (packetCountFieldId == NULL) {
             throwRuntimeException(env, "failed to get field ID: NativeDatagramPacket.count");
+            return JNI_ERR;
+        }
+
+        jclass acceptedSocketCls = (*env)->FindClass(env, "io/netty/channel/epoll/AcceptedSocket");
+        if (acceptedSocketCls == NULL) {
+            // pending exception...
+            return JNI_ERR;
+        }
+
+        acceptedSocketAddrFieldId = (*env)->GetFieldID(env, acceptedSocketCls, "addr", "[B");
+        if (acceptedSocketAddrFieldId == NULL) {
+            throwRuntimeException(env, "failed to get field ID: AcceptedSocket.addr");
             return JNI_ERR;
         }
         return JNI_VERSION_1_6;
@@ -1018,21 +1031,27 @@ JNIEXPORT jint JNICALL Java_io_netty_channel_epoll_Native_finishConnect0(JNIEnv*
     return -optval;
 }
 
-JNIEXPORT jint JNICALL Java_io_netty_channel_epoll_Native_accept0(JNIEnv* env, jclass clazz, jint fd) {
+JNIEXPORT jint JNICALL Java_io_netty_channel_epoll_Native_accept0(JNIEnv* env, jclass clazz, jint fd, jobject acceptedSocket) {
     jint socketFd;
     int err;
+    struct sockaddr_storage addr;
+    socklen_t address_len;
+    address_len = sizeof(addr);
 
     do {
         if (accept4) {
-            socketFd = accept4(fd, NULL, 0, SOCK_NONBLOCK | SOCK_CLOEXEC);
+            socketFd = accept4(fd, (struct sockaddr*) &addr, &address_len, SOCK_NONBLOCK | SOCK_CLOEXEC);
         } else  {
-            socketFd = accept(fd, NULL, 0);
+            socketFd = accept(fd, (struct sockaddr*) &addr, &address_len);
         }
     } while (socketFd == -1 && ((err = errno) == EINTR));
 
     if (socketFd == -1) {
         return -err;
     }
+    // Fill in remote address details
+    (*env)->SetObjectField(env, acceptedSocket, acceptedSocketAddrFieldId, createInetSocketAddressArray(env, addr));
+
     if (accept4)  {
         return socketFd;
     } else  {

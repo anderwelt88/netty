@@ -40,12 +40,12 @@ public final class EpollSocketChannel extends AbstractEpollStreamChannel impleme
     private volatile InetSocketAddress local;
     private volatile InetSocketAddress remote;
 
-    EpollSocketChannel(Channel parent, int fd) {
+    EpollSocketChannel(Channel parent, int fd, InetSocketAddress remote) {
         super(parent, fd);
         config = new EpollSocketChannelConfig(this);
         // Directly cache the remote and local addresses
         // See https://github.com/netty/netty/issues/2359
-        remote = Native.remoteAddress(fd);
+        this.remote = remote;
         local = Native.localAddress(fd);
     }
 

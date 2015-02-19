@@ -506,8 +506,8 @@ final class Native {
     private static native byte[] remoteAddress0(int fd);
     private static native byte[] localAddress0(int fd);
 
-    public static int accept(int fd) throws IOException {
-        int res = accept0(fd);
+    public static int accept(int fd, AcceptedSocket addr) throws IOException {
+        int res = accept0(fd, addr);
         if (res >= 0) {
             return res;
         }
@@ -518,7 +518,7 @@ final class Native {
         throw newIOException("accept", res);
     }
 
-    private static native int accept0(int fd);
+    private static native int accept0(int fd, AcceptedSocket addr);
 
     public static int recvFd(int fd) throws IOException {
         int res = recvFd0(fd);

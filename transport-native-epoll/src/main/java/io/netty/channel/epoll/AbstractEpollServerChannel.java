@@ -62,9 +62,11 @@ public abstract class AbstractEpollServerChannel extends AbstractEpollChannel im
         throw new UnsupportedOperationException();
     }
 
-    protected abstract Channel newChildChannel(int fd) throws Exception;
+    abstract Channel newChildChannel(int fd, byte[] remote) throws Exception;
 
     final class EpollServerSocketUnsafe extends AbstractEpollUnsafe {
+        // Will hold the remote address after accept(...) was sucesssful.
+        private final AcceptedSocket socket = new AcceptedSocket();
 
         @Override
         public void connect(SocketAddress socketAddress, SocketAddress socketAddress2, ChannelPromise channelPromise) {
@@ -85,7 +87,7 @@ public abstract class AbstractEpollServerChannel extends AbstractEpollChannel im
                             ? Integer.MAX_VALUE : config().getMaxMessagesPerRead();
                     int messages = 0;
                     do {
-                        int socketFd = Native.accept(fd().intValue());
+                        int socketFd = Native.accept(fd().intValue(), socket);
                         if (socketFd == -1) {
                             // this means everything was handled for now
                             break;
@@ -93,7 +95,7 @@ public abstract class AbstractEpollServerChannel extends AbstractEpollChannel im
                         readPending = false;
 
                         try {
-                            pipeline.fireChannelRead(newChildChannel(socketFd));
+                            pipeline.fireChannelRead(newChildChannel(socketFd, socket.addr));
                         } catch (Throwable t) {
                             // keep on reading as we use epoll ET and need to consume everything from the socket
                             pipeline.fireChannelReadComplete();
