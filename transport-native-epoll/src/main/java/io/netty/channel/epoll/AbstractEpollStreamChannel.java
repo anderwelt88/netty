@@ -579,6 +579,14 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel {
         @Override
         void epollInReady() {
             final ChannelConfig config = config();
+            boolean edgeTriggered = isFlagSet(Native.EPOLLET);
+
+            if (!readPending && !edgeTriggered && !config.isAutoRead()) {
+                // ChannelConfig.setAutoRead(false) was called in the meantime
+                clearEpollIn0();
+                return;
+            }
+
             final ChannelPipeline pipeline = pipeline();
             final ByteBufAllocator allocator = config.getAllocator();
             RecvByteBufAllocator.Handle allocHandle = this.allocHandle;
@@ -589,10 +597,9 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel {
             ByteBuf byteBuf = null;
             boolean close = false;
             try {
-                boolean edgeTriggered = isFlagSet(Native.EPOLLET);
                 // if edgeTriggered is used we need to read all messages as we are not notified again otherwise.
                 final int maxMessagesPerRead = edgeTriggered
-                        ? Integer.MAX_VALUE : config().getMaxMessagesPerRead();
+                        ? Integer.MAX_VALUE : config.getMaxMessagesPerRead();
                 int messages = 0;
                 int totalReadAmount = 0;
                 do {

@@ -16,6 +16,7 @@
 package io.netty.channel.epoll;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
@@ -75,14 +76,22 @@ public abstract class AbstractEpollServerChannel extends AbstractEpollChannel im
         @Override
         void epollInReady() {
             assert eventLoop().inEventLoop();
+            boolean edgeTriggered = isFlagSet(Native.EPOLLET);
+
+            final ChannelConfig config = config();
+            if (!readPending && !config.isAutoRead() && !edgeTriggered) {
+                // ChannelConfig.setAutoRead(false) was called in the meantime
+                clearEpollIn0();
+                return;
+            }
+
             final ChannelPipeline pipeline = pipeline();
             Throwable exception = null;
             try {
                 try {
-                    boolean edgeTriggered = isFlagSet(Native.EPOLLET);
                     // if edgeTriggered is used we need to read all messages as we are not notified again otherwise.
                     final int maxMessagesPerRead = edgeTriggered
-                            ? Integer.MAX_VALUE : config().getMaxMessagesPerRead();
+                            ? Integer.MAX_VALUE : config.getMaxMessagesPerRead();
                     int messages = 0;
                     do {
                         int socketFd = Native.accept(fd().intValue());
@@ -122,7 +131,7 @@ public abstract class AbstractEpollServerChannel extends AbstractEpollChannel im
                 // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
                 //
                 // See https://github.com/netty/netty/issues/2254
-                if (!config().isAutoRead() && !readPending) {
+                if (!config.isAutoRead() && !readPending) {
                     clearEpollIn0();
                 }
             }
